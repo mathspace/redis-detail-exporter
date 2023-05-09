@@ -8,12 +8,14 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/redis/go-redis/v9"
 )
 
 var (
 	redisAddr = os.Getenv("REDIS_ADDR")
+	keyPats   = []string{"*"}
 )
 
 func getDBs() ([]int, error) {
@@ -49,16 +51,23 @@ func getQueueLengths(db int) (map[string]int64, error) {
 	defer client.Close()
 
 	// Get keys
-	keys, err := client.Keys(ctx, "*").Result()
-	if err != nil {
-		return nil, err
+	keys := map[string]struct{}{}
+	for _, kp := range keyPats {
+		ks, err := client.Keys(ctx, kp).Result()
+		if err != nil {
+			return nil, err
+		}
+		for _, k := range ks {
+			keys[k] = struct{}{}
+		}
 	}
-	for _, key := range keys {
+
+	for k := range keys {
 		// Get length of list
-		l, err := client.LLen(ctx, key).Result()
+		l, err := client.LLen(ctx, k).Result()
 		if err == nil {
 			// Non-list keys will throw errors, so ignore.
-			qLens[key] = l
+			qLens[k] = l
 		}
 	}
 	return qLens, nil
@@ -89,6 +98,10 @@ func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8001"
+	}
+	keyPatsStr := os.Getenv("REDIS_KEY_PATTERNS")
+	if keyPatsStr != "" {
+		keyPats = strings.Split(keyPatsStr, ",")
 	}
 	http.HandleFunc("/metrics", handleMetrics)
 	http.ListenAndServe(":"+port, nil)
