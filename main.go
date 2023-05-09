@@ -9,13 +9,26 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/redis/go-redis/v9"
 )
 
+type queueKey struct {
+	db    int
+	queue string
+}
+
 var (
 	redisAddr = os.Getenv("REDIS_ADDR")
 	keyPats   = []string{"*"}
+
+	queueLengths = struct {
+		q map[queueKey]int64
+		sync.Mutex
+	}{
+		q: make(map[queueKey]int64),
+	}
 )
 
 func getDBs() ([]int, error) {
@@ -76,22 +89,42 @@ func getQueueLengths(db int) (map[string]int64, error) {
 func handleMetrics(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "# HELP redis_queue_length Length of Redis queue")
 	fmt.Fprintln(w, "# TYPE redis_queue_length gauge")
+	defer func() {
+		queueLengths.Lock()
+		for k, v := range queueLengths.q {
+			fmt.Fprintf(w, "redis_queue_length{db=\"%d\",queue=\"%s\"} %d\n", k.db, k.queue, v)
+		}
+		queueLengths.Unlock()
+	}()
 
 	dbs, err := getDBs()
 	if err != nil {
 		log.Printf("Error getting DBs: %v", err)
 		return
 	}
+
+	qLens := make(map[int]map[string]int64)
 	for _, db := range dbs {
-		qLens, err := getQueueLengths(db)
+		q, err := getQueueLengths(db)
 		if err != nil {
 			log.Printf("Error getting queue lengths: %v", err)
 			continue
 		}
-		for k, v := range qLens {
-			fmt.Fprintf(w, "redis_queue_length{db=\"%d\",queue=\"%s\"} %d\n", db, k, v)
+		qLens[db] = q
+
+	}
+
+	queueLengths.Lock()
+	for k := range queueLengths.q {
+		queueLengths.q[k] = 0
+	}
+	for db, q := range qLens {
+		for k, v := range q {
+			queueLengths.q[queueKey{db, k}] = v
 		}
 	}
+	queueLengths.Unlock()
+
 }
 
 func main() {
