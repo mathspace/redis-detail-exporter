@@ -20,8 +20,9 @@ type queueKey struct {
 }
 
 var (
-	redisAddr = os.Getenv("REDIS_ADDR")
-	keyPats   = []string{"*"}
+	redisAddr       = os.Getenv("REDIS_ADDR")
+	keyPats         = []string{"*"}
+	scanCount int64 = 1000
 
 	queueLengths = struct {
 		q map[queueKey]int64
@@ -30,6 +31,25 @@ var (
 		q: make(map[queueKey]int64),
 	}
 )
+
+func scanKeys(ctx context.Context, client *redis.Client, pattern string) ([]string, error) {
+	var (
+		keys   []string
+		cursor uint64
+	)
+
+	for {
+		batch, nextCursor, err := client.Scan(ctx, cursor, pattern, scanCount).Result()
+		if err != nil {
+			return nil, err
+		}
+		keys = append(keys, batch...)
+		cursor = nextCursor
+		if cursor == 0 {
+			return keys, nil
+		}
+	}
+}
 
 func getDBs() ([]int, error) {
 	ctx := context.Background()
@@ -66,7 +86,7 @@ func getQueueLengths(db int) (map[string]int64, error) {
 	// Get keys
 	keys := map[string]struct{}{}
 	for _, kp := range keyPats {
-		ks, err := client.Keys(ctx, kp).Result()
+		ks, err := scanKeys(ctx, client, kp)
 		if err != nil {
 			return nil, err
 		}
