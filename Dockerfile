@@ -1,14 +1,16 @@
-FROM --platform=linux/amd64 alpine as certs
+FROM alpine AS certs
 RUN apk update && apk add ca-certificates
 
-FROM --platform=linux/amd64 golang as builder
+FROM --platform=$BUILDPLATFORM golang AS builder
+ARG TARGETOS
+ARG TARGETARCH
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /redis-detail-exporter
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -o /redis-detail-exporter
 
-FROM --platform=linux/amd64 busybox:glibc
+FROM busybox:glibc
 COPY --from=builder /redis-detail-exporter /
 COPY --from=certs /etc/ssl/certs /etc/ssl/certs
 ENTRYPOINT ["/redis-detail-exporter"]
