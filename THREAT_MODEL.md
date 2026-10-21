@@ -49,4 +49,6 @@ These are investigation hypotheses, not validated vulnerabilities. Establish eac
 Independent offline source architecture review; no application execution or live configuration validation. Source evidence does not establish exploitability. Revisit when entry points, recipients, permissions or deployment paths change.
 
 Repository: github.com/mathspace/redis-detail-exporter
-Version: a788e2f6d89326befa3012aec514bfdf5f568ca3
+Baseline assessment: a788e2f6d89326befa3012aec514bfdf5f568ca3. The eMudhra mitigation below describes this PR.
+
+Go builds require Go 1.27.3 or newer, which rejects the compromised eMudhra intermediates. Rebuild and restart deployed binaries; source version changes do not update running services.
