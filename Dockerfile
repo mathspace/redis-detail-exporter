@@ -11,6 +11,8 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -o /redis-detail-exporter
 
 FROM busybox:glibc
+# Bump to force an OS image rebuild for updated certificates and other fixes.
+RUN echo cachebuster-1
 COPY --from=builder /redis-detail-exporter /
 COPY --from=certs /etc/ssl/certs /etc/ssl/certs
 ENTRYPOINT ["/redis-detail-exporter"]
