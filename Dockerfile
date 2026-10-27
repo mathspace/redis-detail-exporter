@@ -10,7 +10,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -o /redis-detail-exporter
 
-FROM busybox:glibc
+FROM scratch
 COPY --from=builder /redis-detail-exporter /
-COPY --from=certs /etc/ssl/certs /etc/ssl/certs
+COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 ENTRYPOINT ["/redis-detail-exporter"]
