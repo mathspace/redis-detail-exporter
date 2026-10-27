@@ -52,3 +52,5 @@ Repository: github.com/mathspace/redis-detail-exporter
 Baseline assessment: a788e2f6d89326befa3012aec514bfdf5f568ca3. The eMudhra mitigation below describes this PR.
 
 Go builds require Go 1.27.3 or newer, which rejects the compromised eMudhra intermediates. Rebuild and restart deployed binaries; source version changes do not update running services.
+
+The runtime image uses `scratch` with only the statically linked Go binary and CA certificate bundle; no shell or OS packages are shipped (`Dockerfile`).
