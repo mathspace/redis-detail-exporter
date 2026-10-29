@@ -2,7 +2,7 @@
 
 ## Overview
 
-Go HTTP exporter turns Redis keyspace/list lengths into Prometheus queue metrics on each scrape; standalone binary and container are supported (main.go:54, main.go:77, main.go:109; Dockerfile:16).
+Go HTTP exporter turns Redis keyspace/list lengths into Prometheus queue metrics on each scrape; standalone binary and container are supported (main.go:54, main.go:77, main.go:109; Dockerfile:25).
 
 The table maps source-established consumers to effective resources; live deployment is unverified.
 
@@ -10,7 +10,7 @@ The table maps source-established consumers to effective resources; live deploym
 | --- | --- | --- | --- | --- |
 | binary/container / HTTP metrics | PORT; default fallback → :8001/metrics unless PORT overrides | Reachable HTTP clients | Host network controls; handler has no auth middleware | main.go:150; main.go:159 |
 | binary/container / Redis scanning | REDIS_ADDR → explicit address, or localhost:6379 in the exporter network namespace when unset/empty (go-redis default); REDIS_KEY_PATTERNS comma split, default *; all nonempty DBs; SCAN count 1000 | Exporter process; Redis server | Redis external access control; app constructs no password/TLS options | main.go:23; main.go:42; main.go:63; main.go:155 |
-| main push / Container image | Dockerfile build → GHCR tags → ghcr.io/&lt;repository&gt;:latest and :&lt;commit SHA&gt;; amd64/arm64 | Registry consumers | GitHub workflow job permissions and registry token | Dockerfile:4; .github/workflows/build.yaml:32 |
+| main push / Container image | Dockerfile build → GHCR tags → ghcr.io/&lt;repository&gt;:latest and :&lt;commit SHA&gt;; amd64/arm64 | Registry consumers | GitHub workflow job permissions and registry token | Dockerfile:9; .github/workflows/build.yaml:32 |
 
 ## Threat Model, Trust Boundaries, and Assumptions
 
@@ -35,7 +35,7 @@ These are investigation hypotheses, not validated vulnerabilities. Establish eac
 | 1 | A reachable unauthorized scraper learns queue names or database structure beyond its intended audience. | The listener is reachable across a real reader boundary and labels contain sensitive information. | Disclosure of workload metadata, potentially identifiable student context if applications encode it in keys. | Endpoint only emits names/counts; no list-content retrieval. Network restrictions belong to the host. | Restrict scrape ingress to monitoring principals; remove identifiers from key-derived labels or provide approved aggregate labels. | main.go:109; main.go:115; main.go:159 |
 | 2 | Repeated concurrent scrapes or a rapidly growing keyspace impose Redis scanning work that harms the source application. | Caller can reach exporter; representative keyspace and scrape concurrency exceed actual Redis/host capacity. | Shared Redis latency or monitoring interruption; broader outage requires measured source-workload impact. | SCAN iterates with count 1000; list type errors are skipped. These are not a total-work budget. | Set deployment scrape concurrency/rate limits and representative collection budgets; measure impact before claiming denial of service. | main.go:35; main.go:77; main.go:120 |
 | 3 | A Redis writer influences Prometheus output through key names, increasing cardinality or producing misleading metric text. | Writer controls scanned keys and monitoring consumes resulting labels as operational truth. | Metric integrity loss, monitoring cost or misdiagnosis; downstream parser behavior must be established. | Only selected patterns are collected, and LLEN excludes non-list values. Pattern choice is trusted configuration. | Encode label values using the monitoring format’s escaping rules and choose stable bounded label dimensions. | main.go:88; main.go:98; main.go:115; main.go:155 |
-| 4 | Release input compromise changes the exporter image consumed by infrastructure. | Attacker reaches a dependency/build input or gains a relevant repository/workflow capability. | Published image can inherit its deploying host’s network and credential authority. | Main-branch workflow, pinned action commits and package-write job permission separate publication from ordinary scraping. | Protect branch/workflow changes and dependency resolution; deploy an approved immutable image identity. | Dockerfile:4; .github/workflows/build.yaml:3; .github/workflows/build.yaml:17; .github/workflows/build.yaml:38 |
+| 4 | Release input compromise changes the exporter image consumed by infrastructure. | Attacker reaches a dependency/build input or gains a relevant repository/workflow capability. | Published image can inherit its deploying host’s network and credential authority. | Main-branch workflow, pinned action commits and package-write job permission separate publication from ordinary scraping. | Protect branch/workflow changes and dependency resolution; deploy an approved immutable image identity. | Dockerfile:9; .github/workflows/build.yaml:3; .github/workflows/build.yaml:17; .github/workflows/build.yaml:38 |
 
 ## Severity Calibration (Critical, High, Medium, Low)
 
@@ -54,3 +54,10 @@ Baseline assessment: a788e2f6d89326befa3012aec514bfdf5f568ca3. The eMudhra mitig
 Go builds require Go 1.27.3 or newer, which rejects the compromised eMudhra intermediates. Rebuild and restart deployed binaries; source version changes do not update running services.
 
 The runtime image uses `scratch` with only the statically linked Go binary and CA certificate bundle; no shell or OS packages are shipped (`Dockerfile`).
+
+## Container CA refresh
+
+Docker builds use Bookworm as the shared public CA policy and track its main,
+updates and security metadata. Builds require BuildKit and a trusted builder
+HTTPS verifier. Pull mutable bases, rebuild and redeploy to refresh running images.
+Scratch runtime targets receive only the refreshed PEM bundle.
