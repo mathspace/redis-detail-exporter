@@ -1,6 +1,6 @@
 module github.com/mathspace/redis-detail-exporter
 
-go 1.27.3
+go 1.27.4
 
 require github.com/redis/go-redis/v9 v9.18.0
 
